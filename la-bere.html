@@ -291,6 +291,11 @@
             box-shadow: 0 0 0 3px #FFD700;
         }
 
+        .score-btn.unselected {
+            opacity: 0.3;
+            filter: grayscale(50%);
+        }
+
         .scoreboard {
             margin-top: 20px;
         }
@@ -371,6 +376,60 @@
             padding: 10px 0;
             border-bottom: 1px solid #D2691E;
         }
+
+        .edit-controls {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+        }
+
+        .adjust-btn {
+            width: 35px;
+            height: 35px;
+            border: none;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: #D2691E;
+            color: white;
+        }
+
+        .adjust-btn:active {
+            transform: scale(0.9);
+        }
+
+        .btn-edit {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .btn-edit.active {
+            background: #FF9800;
+        }
+
+        .add-player-form {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin: 15px 0;
+            border: 2px solid #4CAF50;
+        }
+
+        .add-player-form input {
+            margin: 10px 0;
+        }
+
+        .form-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .form-buttons button {
+            flex: 1;
+        }
     </style>
 </head>
 <body>
@@ -430,6 +489,8 @@
         <!-- Scoreboard Screen -->
         <div id="scoreboardScreen" class="screen">
             <h1>📊 Scoreboard</h1>
+            <button id="editModeBtn" class="btn btn-edit" onclick="toggleEditMode()">✏️ Edit</button>
+            <div id="addPlayerForm" style="display: none;"></div>
             <div id="scoreboard" class="scoreboard"></div>
             <div id="loserSection"></div>
             <button id="nextRoundBtn" class="btn btn-primary" onclick="nextRound()">Next Round</button>
@@ -447,7 +508,8 @@
             currentRoundType: '',
             startingPlayerIndex: 0,
             currentSelections: [],
-            currentScores: {}
+            currentScores: {},
+            editMode: false
         };
 
         // Initialize
@@ -490,7 +552,8 @@
                 currentRoundType: '',
                 startingPlayerIndex: 0,
                 currentSelections: [],
-                currentScores: {}
+                currentScores: {},
+                editMode: false
             };
             showScreen('setupScreen');
         }
@@ -647,7 +710,7 @@
                 messageDiv.textContent = '🔥 THERE IS A FIUMMM!!';
                 messageDiv.className = 'fiummm-message fiummm-yes';
             } else {
-                messageDiv.textContent = 'No hay fuim señores';
+                messageDiv.textContent = 'No hay fium señores';
                 messageDiv.className = 'fiummm-message fiummm-no';
             }
             
@@ -664,7 +727,7 @@
                     const div = document.createElement('div');
                     div.className = 'score-input';
                     div.innerHTML = `
-                        <div class="player-name">${player.name} - Predicted: ${gameState.currentSelections[idx]}</div>
+                        <div class="player-name">${player.name} - Pidió: ${gameState.currentSelections[idx]}</div>
                         <div class="score-buttons">
                             <button class="score-btn score-btn-yes" id="scoreYes${idx}" onclick="setScore(${idx}, true)">✓ Yes</button>
                             <button class="score-btn score-btn-no" id="scoreNo${idx}" onclick="setScore(${idx}, false)">✗ No</button>
@@ -685,13 +748,15 @@
             const noBtn = document.getElementById(`scoreNo${playerIndex}`);
             
             if (yesBtn && noBtn) {
-                yesBtn.classList.remove('selected');
-                noBtn.classList.remove('selected');
+                yesBtn.classList.remove('selected', 'unselected');
+                noBtn.classList.remove('selected', 'unselected');
                 
                 if (accomplished) {
                     yesBtn.classList.add('selected');
+                    noBtn.classList.add('unselected');
                 } else {
                     noBtn.classList.add('selected');
+                    yesBtn.classList.add('unselected');
                 }
             }
         }
@@ -701,6 +766,27 @@
             const activePlayerCount = gameState.players.filter(p => !p.eliminated).length;
             if (Object.keys(gameState.currentScores).length !== activePlayerCount) {
                 alert('Please enter results for all players!');
+                return;
+            }
+            
+            // Check if at least one player didn't reach their goal
+            const allWon = Object.values(gameState.currentScores).every(score => score === true);
+            if (allWon) {
+                alert('No pueden ganar todos, revisá bien.');
+                return;
+            }
+            
+            // Check if sum of correct predictions exceeds round max
+            const maxValue = gameState.roundMaxValues[gameState.currentRoundType];
+            let sumOfWinners = 0;
+            gameState.players.forEach((player, idx) => {
+                if (!player.eliminated && gameState.currentScores[idx] === true) {
+                    sumOfWinners += gameState.currentSelections[idx];
+                }
+            });
+            
+            if (sumOfWinners > maxValue) {
+                alert(`La suma de los que ganaron (${sumOfWinners}) no puede ser mayor que el máximo de la ronda (${maxValue}). Revisá bien.`);
                 return;
             }
             
@@ -735,6 +821,15 @@
 
         function showScoreboard() {
             showScreen('scoreboardScreen');
+            // Reset edit button state
+            const editBtn = document.getElementById('editModeBtn');
+            if (gameState.editMode) {
+                editBtn.textContent = '✓ Done';
+                editBtn.classList.add('active');
+            } else {
+                editBtn.textContent = '✏️ Edit';
+                editBtn.classList.remove('active');
+            }
             updateScoreboard();
         }
 
@@ -752,15 +847,41 @@
             sortedPlayers.forEach(player => {
                 const div = document.createElement('div');
                 div.className = 'score-item' + (player.eliminated ? ' eliminated' : '');
-                div.innerHTML = `
-                    <span class="player-name-score">
-                        ${player.name}
-                        ${player.eliminated ? '<span class="eliminated-badge">ELIMINATED</span>' : ''}
-                    </span>
-                    <span class="player-score">${player.score}</span>
-                `;
+                
+                // Find the original index of this player
+                const playerIndex = gameState.players.findIndex(p => p.name === player.name);
+                
+                if (gameState.editMode) {
+                    div.innerHTML = `
+                        <span class="player-name-score">
+                            ${player.name}
+                            ${player.eliminated ? '<span class="eliminated-badge">SE FUE</span>' : ''}
+                        </span>
+                        <div class="edit-controls">
+                            <button class="adjust-btn" onclick="adjustScore(${playerIndex}, -1)">-1</button>
+                            <span class="player-score">${player.score}</span>
+                            <button class="adjust-btn" onclick="adjustScore(${playerIndex}, 1)">+1</button>
+                        </div>
+                    `;
+                } else {
+                    div.innerHTML = `
+                        <span class="player-name-score">
+                            ${player.name}
+                            ${player.eliminated ? '<span class="eliminated-badge">SE FUE</span>' : ''}
+                        </span>
+                        <span class="player-score">${player.score}</span>
+                    `;
+                }
                 container.appendChild(div);
             });
+            
+            // Show "Add New Player" button in edit mode
+            if (gameState.editMode) {
+                const addPlayerDiv = document.createElement('div');
+                addPlayerDiv.style.marginTop = '15px';
+                addPlayerDiv.innerHTML = '<button class="btn btn-primary" onclick="showAddPlayerForm()">➕ Add New Player</button>';
+                container.appendChild(addPlayerDiv);
+            }
             
             // Check for loser (only 1 player remaining)
             const activePlayers = gameState.players.filter(p => !p.eliminated);
@@ -782,10 +903,14 @@
         }
 
         function nextRound() {
+            gameState.editMode = false;
+            document.getElementById('addPlayerForm').style.display = 'none';
             startRound();
         }
 
         function backToMainMenu() {
+            gameState.editMode = false;
+            document.getElementById('addPlayerForm').style.display = 'none';
             showScreen('splashScreen');
             checkForSavedGame();
         }
@@ -795,6 +920,91 @@
                 screen.classList.remove('active');
             });
             document.getElementById(screenId).classList.add('active');
+        }
+
+        function toggleEditMode() {
+            gameState.editMode = !gameState.editMode;
+            const editBtn = document.getElementById('editModeBtn');
+            
+            if (gameState.editMode) {
+                editBtn.textContent = '✓ Done';
+                editBtn.classList.add('active');
+            } else {
+                editBtn.textContent = '✏️ Edit';
+                editBtn.classList.remove('active');
+                // Hide add player form if open
+                document.getElementById('addPlayerForm').style.display = 'none';
+            }
+            
+            updateScoreboard();
+            saveGame();
+        }
+
+        function adjustScore(playerIndex, amount) {
+            gameState.players[playerIndex].score += amount;
+            
+            // Prevent negative scores
+            if (gameState.players[playerIndex].score < 0) {
+                gameState.players[playerIndex].score = 0;
+            }
+            
+            // Check for elimination/un-elimination
+            if (gameState.players[playerIndex].score >= 50) {
+                gameState.players[playerIndex].eliminated = true;
+            } else if (gameState.players[playerIndex].score < 50 && gameState.players[playerIndex].eliminated) {
+                gameState.players[playerIndex].eliminated = false;
+            }
+            
+            updateScoreboard();
+            saveGame();
+        }
+
+        function showAddPlayerForm() {
+            const formContainer = document.getElementById('addPlayerForm');
+            formContainer.style.display = 'block';
+            formContainer.innerHTML = `
+                <div class="add-player-form">
+                    <h3 style="color: #8B4513; margin-bottom: 15px;">Add New Player</h3>
+                    <input type="text" id="newPlayerName" placeholder="Player Name">
+                    <input type="number" id="newPlayerScore" placeholder="Starting Score" value="0" min="0">
+                    <div class="form-buttons">
+                        <button class="btn btn-primary" onclick="addNewPlayer()">Add Player</button>
+                        <button class="btn btn-secondary" onclick="cancelAddPlayer()">Cancel</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function addNewPlayer() {
+            const name = document.getElementById('newPlayerName').value.trim();
+            const score = parseInt(document.getElementById('newPlayerScore').value) || 0;
+            
+            if (!name) {
+                alert('Please enter a player name!');
+                return;
+            }
+            
+            // Check if name already exists
+            if (gameState.players.some(p => p.name === name)) {
+                alert('A player with this name already exists!');
+                return;
+            }
+            
+            // Add the new player
+            gameState.players.push({
+                name: name,
+                score: score,
+                eliminated: score >= 50
+            });
+            
+            // Hide form and update
+            cancelAddPlayer();
+            updateScoreboard();
+            saveGame();
+        }
+
+        function cancelAddPlayer() {
+            document.getElementById('addPlayerForm').style.display = 'none';
         }
     </script>
 </body>
