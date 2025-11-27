@@ -430,6 +430,119 @@
         .form-buttons button {
             flex: 1;
         }
+
+        .dealer-badge {
+            display: inline-block;
+            background: #FFD700;
+            color: #8B4513;
+            padding: 3px 8px;
+            border-radius: 50%;
+            font-size: 14px;
+            font-weight: bold;
+            margin-left: 8px;
+            border: 2px solid #8B4513;
+        }
+
+        .roulette-container {
+            text-align: center;
+            padding: 40px 20px;
+        }
+
+        .roulette-wheel {
+            position: relative;
+            width: 280px;
+            height: 280px;
+            margin: 30px auto;
+            border: 8px solid #D2691E;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #FFF8DC 0%, #F5DEB3 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .roulette-names {
+            font-size: 24px;
+            font-weight: bold;
+            color: #8B4513;
+            animation: spin 3s cubic-bezier(0.17, 0.67, 0.12, 0.99);
+        }
+
+        @keyframes spin {
+            0% { 
+                transform: translateY(0); 
+                opacity: 1;
+            }
+            10% { 
+                transform: translateY(-30px); 
+                opacity: 0.7;
+            }
+            20% { 
+                transform: translateY(0); 
+                opacity: 1;
+            }
+            30% { 
+                transform: translateY(-30px); 
+                opacity: 0.7;
+            }
+            40% { 
+                transform: translateY(0); 
+                opacity: 1;
+            }
+            50% { 
+                transform: translateY(-30px); 
+                opacity: 0.7;
+            }
+            60% { 
+                transform: translateY(0); 
+                opacity: 1;
+            }
+            70% { 
+                transform: translateY(-30px); 
+                opacity: 0.7;
+            }
+            80% { 
+                transform: translateY(0); 
+                opacity: 1;
+            }
+            90% { 
+                transform: translateY(-30px); 
+                opacity: 0.7;
+            }
+            100% { 
+                transform: translateY(0); 
+                opacity: 1;
+            }
+        }
+
+        .dealer-selection-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .player-selection-btn {
+            padding: 20px;
+            background: white;
+            border: 3px solid #D2691E;
+            border-radius: 12px;
+            font-size: 18px;
+            font-weight: bold;
+            color: #8B4513;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .player-selection-btn:hover {
+            background: #FFF8DC;
+            transform: scale(1.02);
+        }
+
+        .player-selection-btn:active {
+            transform: scale(0.98);
+        }
     </style>
 </head>
 <body>
@@ -456,6 +569,31 @@
                 <div id="nameInputs"></div>
                 <button class="btn btn-primary" onclick="startGame()">Start Game</button>
             </div>
+        </div>
+
+        <!-- Dealer Selection Screen -->
+        <div id="dealerScreen" class="screen">
+            <h1>🎴 Select Dealer</h1>
+            <p class="info-text">Who will be the dealer?</p>
+            <button class="btn btn-primary" onclick="showRandomDealerSelection()">🎲 Choose Randomly</button>
+            <button class="btn btn-secondary" onclick="showManualDealerSelection()">👆 Select Manually</button>
+        </div>
+
+        <!-- Random Dealer Selection Screen -->
+        <div id="randomDealerScreen" class="screen">
+            <div class="roulette-container">
+                <h2>Selecting Dealer...</h2>
+                <div class="roulette-wheel">
+                    <div class="roulette-names" id="rouletteNames"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Manual Dealer Selection Screen -->
+        <div id="manualDealerScreen" class="screen">
+            <h2>Select a Dealer</h2>
+            <p class="info-text">Tap on a player to make them the dealer</p>
+            <div id="manualDealerList"></div>
         </div>
 
         <!-- Round Selection Screen -->
@@ -506,6 +644,7 @@
             roundTypes: ['Uno', 'Tres', 'Cinco', 'Siete'],
             roundMaxValues: { 'Uno': 1, 'Tres': 3, 'Cinco': 5, 'Siete': 7 },
             currentRoundType: '',
+            dealerIndex: null,
             startingPlayerIndex: 0,
             currentSelections: [],
             currentScores: {},
@@ -550,6 +689,7 @@
                 roundTypes: ['Uno', 'Tres', 'Cinco', 'Siete'],
                 roundMaxValues: { 'Uno': 1, 'Tres': 3, 'Cinco': 5, 'Siete': 7 },
                 currentRoundType: '',
+                dealerIndex: null,
                 startingPlayerIndex: 0,
                 currentSelections: [],
                 currentScores: {},
@@ -601,11 +741,10 @@
                 });
             }
             
-            // Randomly select starting player
-            gameState.startingPlayerIndex = Math.floor(Math.random() * gameState.players.length);
             gameState.currentRound = 0;
             
-            startRound();
+            // Show dealer selection screen
+            showScreen('dealerScreen');
         }
 
         function startRound() {
@@ -625,9 +764,10 @@
         function updateRoundScreen() {
             const maxValue = gameState.roundMaxValues[gameState.currentRoundType];
             const startingPlayer = gameState.players[gameState.startingPlayerIndex];
+            const dealer = gameState.players[gameState.dealerIndex];
             
             document.getElementById('roundName').textContent = `ROUND: ${gameState.currentRoundType.toUpperCase()}`;
-            document.getElementById('startingPlayer').textContent = `Starting: ${startingPlayer.name}`;
+            document.getElementById('startingPlayer').textContent = `Dealer: ${dealer.name} | Starting: ${startingPlayer.name}`;
             
             const container = document.getElementById('playerSelections');
             container.innerHTML = '';
@@ -644,8 +784,9 @@
             activePlayers.forEach((player, orderIndex) => {
                 const div = document.createElement('div');
                 div.className = 'player-selection';
+                const dealerBadge = player.originalIndex === gameState.dealerIndex ? '<span class="dealer-badge">🎴</span>' : '';
                 div.innerHTML = `
-                    <div class="player-name">${player.name}</div>
+                    <div class="player-name">${player.name}${dealerBadge}</div>
                     <div class="choice-buttons" id="choices${player.originalIndex}"></div>
                 `;
                 container.appendChild(div);
@@ -807,14 +948,22 @@
                 }
             });
             
-            // Move to next starting player (counter-clockwise = next to the right)
+            // Move dealer to next player (counter-clockwise)
             // Skip eliminated players
             let attempts = 0;
             do {
+                gameState.dealerIndex = (gameState.dealerIndex + 1) % gameState.players.length;
+                attempts++;
+            } while (gameState.players[gameState.dealerIndex].eliminated && 
+                     attempts < gameState.players.length);
+            
+            // Starting player is the player after the dealer
+            attempts = 0;
+            gameState.startingPlayerIndex = (gameState.dealerIndex + 1) % gameState.players.length;
+            while (gameState.players[gameState.startingPlayerIndex].eliminated && attempts < gameState.players.length) {
                 gameState.startingPlayerIndex = (gameState.startingPlayerIndex + 1) % gameState.players.length;
                 attempts++;
-            } while (gameState.players[gameState.startingPlayerIndex].eliminated && 
-                     attempts < gameState.players.length);
+            }
             
             gameState.currentRound++;
             
@@ -1008,6 +1157,66 @@
 
         function cancelAddPlayer() {
             document.getElementById('addPlayerForm').style.display = 'none';
+        }
+
+        function showRandomDealerSelection() {
+            showScreen('randomDealerScreen');
+            
+            // Randomly select dealer
+            const randomIndex = Math.floor(Math.random() * gameState.players.length);
+            
+            // Show roulette animation
+            const rouletteNames = document.getElementById('rouletteNames');
+            let currentIndex = 0;
+            const intervalDuration = 150;
+            const totalDuration = 3000;
+            const iterations = totalDuration / intervalDuration;
+            let count = 0;
+            
+            const interval = setInterval(() => {
+                rouletteNames.textContent = gameState.players[currentIndex].name;
+                currentIndex = (currentIndex + 1) % gameState.players.length;
+                count++;
+                
+                if (count >= iterations) {
+                    clearInterval(interval);
+                    // Show the final selected dealer
+                    rouletteNames.textContent = gameState.players[randomIndex].name;
+                    gameState.dealerIndex = randomIndex;
+                    
+                    // Calculate starting player (next to dealer)
+                    gameState.startingPlayerIndex = (gameState.dealerIndex + 1) % gameState.players.length;
+                    
+                    // Wait a moment then start the round
+                    setTimeout(() => {
+                        startRound();
+                    }, 1500);
+                }
+            }, intervalDuration);
+        }
+
+        function showManualDealerSelection() {
+            showScreen('manualDealerScreen');
+            
+            const container = document.getElementById('manualDealerList');
+            container.innerHTML = '';
+            
+            gameState.players.forEach((player, index) => {
+                const btn = document.createElement('button');
+                btn.className = 'player-selection-btn';
+                btn.textContent = player.name;
+                btn.onclick = () => selectDealer(index);
+                container.appendChild(btn);
+            });
+        }
+
+        function selectDealer(index) {
+            gameState.dealerIndex = index;
+            
+            // Calculate starting player (next to dealer)
+            gameState.startingPlayerIndex = (gameState.dealerIndex + 1) % gameState.players.length;
+            
+            startRound();
         }
     </script>
 </body>
