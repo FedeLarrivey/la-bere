@@ -465,7 +465,7 @@
                 <div class="starting-player" id="startingPlayer">Starting Player</div>
             </div>
             <div id="playerSelections"></div>
-            <button id="showSumBtn" class="btn btn-primary" onclick="showSum()" style="display: none;">Show Total</button>
+            <button id="showSumBtn" class="btn btn-primary" onclick="showSum()" disabled>Show Total</button>
         </div>
 
         <!-- Sum Display Screen -->
@@ -615,6 +615,10 @@
             
             showScreen('roundScreen');
             updateRoundScreen();
+            
+            // Disable the Show Total button until all predictions are made
+            document.getElementById('showSumBtn').disabled = true;
+            
             saveGame();
         }
 
@@ -691,9 +695,8 @@
                 return player.eliminated || gameState.currentSelections[idx] !== null;
             });
             
-            if (allSelected) {
-                document.getElementById('showSumBtn').style.display = 'block';
-            }
+            // Enable or disable the button
+            document.getElementById('showSumBtn').disabled = !allSelected;
         }
 
         function showSum() {
