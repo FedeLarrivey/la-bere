@@ -564,20 +564,20 @@
         .history-table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 14px;
+            font-size: 11px;
         }
 
         .history-table th {
             background: linear-gradient(135deg, #D2691E 0%, #8B4513 100%);
             color: white;
-            padding: 12px 8px;
+            padding: 6px 4px;
             text-align: left;
             font-weight: bold;
             border-bottom: 2px solid #8B4513;
         }
 
         .history-table td {
-            padding: 10px 8px;
+            padding: 6px 4px;
             border-bottom: 1px solid #DEB887;
             color: #8B4513;
         }
@@ -602,6 +602,17 @@
         .history-points {
             font-weight: bold;
             color: #D2691E;
+        }
+
+        @media (max-width: 500px) {
+            .history-table {
+                font-size: 10px;
+            }
+            
+            .history-table th,
+            .history-table td {
+                padding: 4px 2px;
+            }
         }
     </style>
 </head>
@@ -698,13 +709,13 @@
                     <table class="history-table" id="historyTable">
                         <thead>
                             <tr>
-                                <th>Round</th>
+                                <th>Rnd</th>
                                 <th>Type</th>
-                                <th>Dealer</th>
+                                <th>Dlr</th>
                                 <th>Player</th>
-                                <th>Predicted</th>
-                                <th>Result</th>
-                                <th>Points</th>
+                                <th>Pred</th>
+                                <th>✓/✗</th>
+                                <th>Pts</th>
                             </tr>
                         </thead>
                         <tbody id="historyTableBody">
