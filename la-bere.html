@@ -283,7 +283,7 @@
         }
 
         .score-btn-no {
-            background: #F44336;
+            background: #616161;
             color: white;
         }
 
@@ -543,6 +543,66 @@
         .player-selection-btn:active {
             transform: scale(0.98);
         }
+
+        .history-container {
+            margin-top: 20px;
+            display: none;
+        }
+
+        .history-container.show {
+            display: block;
+        }
+
+        .history-table-wrapper {
+            overflow-x: auto;
+            background: white;
+            border-radius: 12px;
+            padding: 15px;
+            border: 2px solid #D2691E;
+        }
+
+        .history-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        .history-table th {
+            background: linear-gradient(135deg, #D2691E 0%, #8B4513 100%);
+            color: white;
+            padding: 12px 8px;
+            text-align: left;
+            font-weight: bold;
+            border-bottom: 2px solid #8B4513;
+        }
+
+        .history-table td {
+            padding: 10px 8px;
+            border-bottom: 1px solid #DEB887;
+            color: #8B4513;
+        }
+
+        .history-table tr:nth-child(even) {
+            background: #FFF8DC;
+        }
+
+        .history-table tr:nth-child(odd) {
+            background: white;
+        }
+
+        .history-achieved-yes {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+
+        .history-achieved-no {
+            color: #616161;
+        }
+
+        .history-points {
+            font-weight: bold;
+            color: #D2691E;
+        }
     </style>
 </head>
 <body>
@@ -631,6 +691,27 @@
             <div id="addPlayerForm" style="display: none;"></div>
             <div id="scoreboard" class="scoreboard"></div>
             <div id="loserSection"></div>
+            <button id="showHistoryBtn" class="btn btn-secondary" onclick="toggleHistory()">📜 Show History</button>
+            <div id="historyContainer" class="history-container">
+                <h2 style="color: #8B4513; margin: 20px 0 10px 0;">Round History</h2>
+                <div class="history-table-wrapper">
+                    <table class="history-table" id="historyTable">
+                        <thead>
+                            <tr>
+                                <th>Round</th>
+                                <th>Type</th>
+                                <th>Dealer</th>
+                                <th>Player</th>
+                                <th>Predicted</th>
+                                <th>Result</th>
+                                <th>Points</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historyTableBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
             <button id="nextRoundBtn" class="btn btn-primary" onclick="nextRound()">Next Round</button>
             <button class="btn btn-secondary" onclick="backToMainMenu()">Main Menu</button>
         </div>
@@ -648,7 +729,8 @@
             startingPlayerIndex: 0,
             currentSelections: [],
             currentScores: {},
-            editMode: false
+            editMode: false,
+            roundHistory: []
         };
 
         // Initialize
@@ -693,7 +775,8 @@
                 startingPlayerIndex: 0,
                 currentSelections: [],
                 currentScores: {},
-                editMode: false
+                editMode: false,
+                roundHistory: []
             };
             showScreen('setupScreen');
         }
@@ -866,19 +949,27 @@
             container.innerHTML = '';
             gameState.currentScores = {};
             
-            gameState.players.forEach((player, idx) => {
-                if (!player.eliminated) {
-                    const div = document.createElement('div');
-                    div.className = 'score-input';
-                    div.innerHTML = `
-                        <div class="player-name">${player.name} - Pidió: ${gameState.currentSelections[idx]}</div>
-                        <div class="score-buttons">
-                            <button class="score-btn score-btn-yes" id="scoreYes${idx}" onclick="setScore(${idx}, true)">✓ Yes</button>
-                            <button class="score-btn score-btn-no" id="scoreNo${idx}" onclick="setScore(${idx}, false)">✗ No</button>
-                        </div>
-                    `;
-                    container.appendChild(div);
+            // Create inputs in the same order as round selection (starting from starting player)
+            const activePlayers = [];
+            for (let i = 0; i < gameState.players.length; i++) {
+                const index = (gameState.startingPlayerIndex + i) % gameState.players.length;
+                if (!gameState.players[index].eliminated) {
+                    activePlayers.push(index);
                 }
+            }
+            
+            activePlayers.forEach(idx => {
+                const player = gameState.players[idx];
+                const div = document.createElement('div');
+                div.className = 'score-input';
+                div.innerHTML = `
+                    <div class="player-name">${player.name} - Pidió: ${gameState.currentSelections[idx]}</div>
+                    <div class="score-buttons">
+                        <button class="score-btn score-btn-yes" id="scoreYes${idx}" onclick="setScore(${idx}, true)">✓ Yes</button>
+                        <button class="score-btn score-btn-no" id="scoreNo${idx}" onclick="setScore(${idx}, false)">✗ No</button>
+                    </div>
+                `;
+                container.appendChild(div);
             });
             
             showScreen('scoreScreen');
@@ -934,11 +1025,29 @@
                 return;
             }
             
+            // Save round history
+            const roundData = {
+                round: gameState.currentRound + 1,
+                type: gameState.currentRoundType,
+                dealer: gameState.players[gameState.dealerIndex].name,
+                results: []
+            };
+            
             // Calculate and add scores
             gameState.players.forEach((player, idx) => {
                 if (!player.eliminated && gameState.currentScores[idx] !== undefined) {
+                    const pointsEarned = gameState.currentScores[idx] ? (5 + gameState.currentSelections[idx]) : 0;
+                    
+                    // Add to history
+                    roundData.results.push({
+                        player: player.name,
+                        predicted: gameState.currentSelections[idx],
+                        achieved: gameState.currentScores[idx],
+                        points: pointsEarned
+                    });
+                    
                     if (gameState.currentScores[idx]) {
-                        player.score += 5 + gameState.currentSelections[idx];
+                        player.score += pointsEarned;
                     }
                     
                     // Check for elimination
@@ -947,6 +1056,9 @@
                     }
                 }
             });
+            
+            // Add round to history
+            gameState.roundHistory.push(roundData);
             
             // Move dealer to next player (counter-clockwise)
             // Skip eliminated players
@@ -1217,6 +1329,78 @@
             gameState.startingPlayerIndex = (gameState.dealerIndex + 1) % gameState.players.length;
             
             startRound();
+        }
+
+        function toggleHistory() {
+            const container = document.getElementById('historyContainer');
+            const btn = document.getElementById('showHistoryBtn');
+            
+            if (container.classList.contains('show')) {
+                container.classList.remove('show');
+                btn.textContent = '📜 Show History';
+            } else {
+                container.classList.add('show');
+                btn.textContent = '📜 Hide History';
+                updateHistoryTable();
+            }
+        }
+
+        function updateHistoryTable() {
+            const tbody = document.getElementById('historyTableBody');
+            tbody.innerHTML = '';
+            
+            if (gameState.roundHistory.length === 0) {
+                const row = tbody.insertRow();
+                const cell = row.insertCell(0);
+                cell.colSpan = 7;
+                cell.textContent = 'No rounds played yet';
+                cell.style.textAlign = 'center';
+                cell.style.padding = '20px';
+                cell.style.color = '#8B4513';
+                return;
+            }
+            
+            gameState.roundHistory.forEach(round => {
+                round.results.forEach((result, index) => {
+                    const row = tbody.insertRow();
+                    
+                    // Only show round info on first player of each round
+                    if (index === 0) {
+                        const roundCell = row.insertCell(0);
+                        roundCell.textContent = round.round;
+                        roundCell.rowSpan = round.results.length;
+                        roundCell.style.fontWeight = 'bold';
+                        roundCell.style.verticalAlign = 'middle';
+                        
+                        const typeCell = row.insertCell(1);
+                        typeCell.textContent = round.type;
+                        typeCell.rowSpan = round.results.length;
+                        typeCell.style.verticalAlign = 'middle';
+                        
+                        const dealerCell = row.insertCell(2);
+                        dealerCell.textContent = round.dealer;
+                        dealerCell.rowSpan = round.results.length;
+                        dealerCell.style.verticalAlign = 'middle';
+                    }
+                    
+                    const playerCell = row.insertCell(index === 0 ? 3 : 0);
+                    playerCell.textContent = result.player;
+                    
+                    const predictedCell = row.insertCell(index === 0 ? 4 : 1);
+                    predictedCell.textContent = result.predicted;
+                    predictedCell.style.textAlign = 'center';
+                    
+                    const resultCell = row.insertCell(index === 0 ? 5 : 2);
+                    resultCell.textContent = result.achieved ? '✓' : '✗';
+                    resultCell.className = result.achieved ? 'history-achieved-yes' : 'history-achieved-no';
+                    resultCell.style.textAlign = 'center';
+                    
+                    const pointsCell = row.insertCell(index === 0 ? 6 : 3);
+                    pointsCell.textContent = result.points;
+                    pointsCell.className = 'history-points';
+                    pointsCell.style.textAlign = 'center';
+                });
+            });
         }
     </script>
 </body>
