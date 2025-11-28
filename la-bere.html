@@ -656,6 +656,13 @@
             <div id="manualDealerList"></div>
         </div>
 
+        <!-- Dealer Repeat Check Screen -->
+        <div id="dealerRepeatScreen" class="screen">
+            <h2 style="color: #8B4513; margin-bottom: 20px;"><span id="repeatDealerName"></span> ya repartió la de uno</h2>
+            <button class="btn btn-primary" onclick="dealerRepeatConfirm()">Repartir igual</button>
+            <button class="btn btn-secondary" onclick="skipDealerForUno()">Saltear</button>
+        </div>
+
         <!-- Round Selection Screen -->
         <div id="roundScreen" class="screen">
             <div class="round-header">
@@ -730,7 +737,8 @@
             currentSelections: [],
             currentScores: {},
             editMode: false,
-            roundHistory: []
+            roundHistory: [],
+            dealersWhoDealtUno: []
         };
 
         // Initialize
@@ -776,7 +784,8 @@
                 currentSelections: [],
                 currentScores: {},
                 editMode: false,
-                roundHistory: []
+                roundHistory: [],
+                dealersWhoDealtUno: []
             };
             showScreen('setupScreen');
         }
@@ -834,6 +843,22 @@
             const roundIndex = gameState.currentRound % 4;
             gameState.currentRoundType = gameState.roundTypes[roundIndex];
             gameState.currentSelections = Array(gameState.players.length).fill(null);
+            
+            // Check if this is round Uno and dealer has dealt it before
+            if (gameState.currentRoundType === 'Uno' && 
+                gameState.dealersWhoDealtUno.includes(gameState.dealerIndex)) {
+                // Show repeat check screen
+                const dealerName = gameState.players[gameState.dealerIndex].name;
+                document.getElementById('repeatDealerName').textContent = dealerName;
+                showScreen('dealerRepeatScreen');
+                return;
+            }
+            
+            // If it's round Uno and dealer hasn't dealt it, record them
+            if (gameState.currentRoundType === 'Uno' && 
+                !gameState.dealersWhoDealtUno.includes(gameState.dealerIndex)) {
+                gameState.dealersWhoDealtUno.push(gameState.dealerIndex);
+            }
             
             showScreen('roundScreen');
             updateRoundScreen();
@@ -1328,6 +1353,33 @@
             // Calculate starting player (next to dealer)
             gameState.startingPlayerIndex = (gameState.dealerIndex + 1) % gameState.players.length;
             
+            startRound();
+        }
+
+        function dealerRepeatConfirm() {
+            // User chose to deal anyway, continue with current dealer
+            showScreen('roundScreen');
+            updateRoundScreen();
+            
+            // Disable the Show Total button until all predictions are made
+            document.getElementById('showSumBtn').disabled = true;
+            
+            saveGame();
+        }
+
+        function skipDealerForUno() {
+            // Move to next dealer
+            let attempts = 0;
+            do {
+                gameState.dealerIndex = (gameState.dealerIndex + 1) % gameState.players.length;
+                attempts++;
+            } while (gameState.players[gameState.dealerIndex].eliminated && 
+                     attempts < gameState.players.length);
+            
+            // Update starting player
+            gameState.startingPlayerIndex = (gameState.dealerIndex + 1) % gameState.players.length;
+            
+            // Re-run startRound to check new dealer
             startRound();
         }
 
