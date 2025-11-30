@@ -1174,11 +1174,62 @@
                 return;
             }
             
+            // Check if we're recalculating this round (going back and changing scores)
+            // If currentRound was already incremented, the last round in history should match currentRound
+            // Otherwise, it should match currentRound + 1
+            const lastRoundInHistory = gameState.roundHistory.length > 0 ? gameState.roundHistory[gameState.roundHistory.length - 1] : null;
+            const isRecalculating = lastRoundInHistory !== null && 
+                                   lastRoundInHistory.type === gameState.currentRoundType &&
+                                   (lastRoundInHistory.round === gameState.currentRound || 
+                                    lastRoundInHistory.round === gameState.currentRound + 1);
+            
+            // If recalculating, reverse the previous scores and restore round state
+            if (isRecalculating) {
+                const lastRound = gameState.roundHistory[gameState.roundHistory.length - 1];
+                
+                // Reverse the scores that were added in the previous calculation
+                lastRound.results.forEach(result => {
+                    const playerIndex = gameState.players.findIndex(p => p.name === result.player);
+                    if (playerIndex !== -1) {
+                        // Subtract the points that were previously added
+                        if (result.achieved) {
+                            gameState.players[playerIndex].score -= result.points;
+                            
+                            // Re-check elimination status (player might no longer be eliminated)
+                            if (gameState.players[playerIndex].score < 50) {
+                                gameState.players[playerIndex].eliminated = false;
+                            }
+                        }
+                    }
+                });
+                
+                // Restore dealer and starting player indices if stored in history
+                if (lastRound.dealerIndex !== undefined) {
+                    gameState.dealerIndex = lastRound.dealerIndex;
+                }
+                if (lastRound.startingPlayerIndex !== undefined) {
+                    gameState.startingPlayerIndex = lastRound.startingPlayerIndex;
+                }
+                
+                // Restore currentRound to what it was before the first calculation
+                if (lastRound.currentRoundAtTime !== undefined) {
+                    gameState.currentRound = lastRound.currentRoundAtTime;
+                }
+                
+                // Remove the last round from history
+                gameState.roundHistory.pop();
+            }
+            
             // Save round history
+            // If recalculating, use the same round number; otherwise use currentRound + 1
+            const roundNumber = isRecalculating ? lastRoundInHistory.round : gameState.currentRound + 1;
             const roundData = {
-                round: gameState.currentRound + 1,
+                round: roundNumber,
                 type: gameState.currentRoundType,
                 dealer: gameState.players[gameState.dealerIndex].name,
+                dealerIndex: gameState.dealerIndex, // Store for recalculation
+                startingPlayerIndex: gameState.startingPlayerIndex, // Store for recalculation
+                currentRoundAtTime: gameState.currentRound, // Store for recalculation
                 results: []
             };
             
@@ -1209,24 +1260,27 @@
             // Add round to history
             gameState.roundHistory.push(roundData);
             
-            // Move dealer to next player (counter-clockwise)
-            // Skip eliminated players
-            let attempts = 0;
-            do {
-                gameState.dealerIndex = (gameState.dealerIndex + 1) % gameState.players.length;
-                attempts++;
-            } while (gameState.players[gameState.dealerIndex].eliminated && 
-                     attempts < gameState.players.length);
-            
-            // Starting player is the player after the dealer
-            attempts = 0;
-            gameState.startingPlayerIndex = (gameState.dealerIndex + 1) % gameState.players.length;
-            while (gameState.players[gameState.startingPlayerIndex].eliminated && attempts < gameState.players.length) {
-                gameState.startingPlayerIndex = (gameState.startingPlayerIndex + 1) % gameState.players.length;
-                attempts++;
+            // Only move to next round/dealer if this is a new calculation, not a recalculation
+            if (!isRecalculating) {
+                // Move dealer to next player (counter-clockwise)
+                // Skip eliminated players
+                let attempts = 0;
+                do {
+                    gameState.dealerIndex = (gameState.dealerIndex + 1) % gameState.players.length;
+                    attempts++;
+                } while (gameState.players[gameState.dealerIndex].eliminated && 
+                         attempts < gameState.players.length);
+                
+                // Starting player is the player after the dealer
+                attempts = 0;
+                gameState.startingPlayerIndex = (gameState.dealerIndex + 1) % gameState.players.length;
+                while (gameState.players[gameState.startingPlayerIndex].eliminated && attempts < gameState.players.length) {
+                    gameState.startingPlayerIndex = (gameState.startingPlayerIndex + 1) % gameState.players.length;
+                    attempts++;
+                }
+                
+                gameState.currentRound++;
             }
-            
-            gameState.currentRound++;
             
             saveGame();
             showScoreboard();
