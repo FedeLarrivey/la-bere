@@ -1286,15 +1286,15 @@
                     const canMoveDown = displayIndex < playersToDisplay.length - 1;
                     
                     div.innerHTML = `
-                        <span class="player-name-score">
+                        <div style="display: flex; flex-direction: column; gap: 2px; margin-right: 10px;">
+                            <button class="adjust-btn" onclick="movePlayerUp(${displayIndex})" ${!canMoveUp ? 'disabled style="opacity: 0.3;"' : ''} style="width: 30px; height: 20px; font-size: 12px; padding: 0;">↑</button>
+                            <button class="adjust-btn" onclick="movePlayerDown(${displayIndex})" ${!canMoveDown ? 'disabled style="opacity: 0.3;"' : ''} style="width: 30px; height: 20px; font-size: 12px; padding: 0;">↓</button>
+                        </div>
+                        <span class="player-name-score" style="flex: 1;">
                             ${player.name}
                             ${player.eliminated ? '<span class="eliminated-badge">SE FUE</span>' : ''}
                         </span>
                         <div class="edit-controls">
-                            <div style="display: flex; flex-direction: column; gap: 2px; margin-right: 5px;">
-                                <button class="adjust-btn" onclick="movePlayerUp(${displayIndex})" ${!canMoveUp ? 'disabled style="opacity: 0.3;"' : ''} style="width: 30px; height: 20px; font-size: 12px; padding: 0;">↑</button>
-                                <button class="adjust-btn" onclick="movePlayerDown(${displayIndex})" ${!canMoveDown ? 'disabled style="opacity: 0.3;"' : ''} style="width: 30px; height: 20px; font-size: 12px; padding: 0;">↓</button>
-                            </div>
                             <button class="adjust-btn" onclick="adjustScore(${playerIndex}, -1)">-1</button>
                             <span class="player-score">${player.score}</span>
                             <button class="adjust-btn" onclick="adjustScore(${playerIndex}, 1)">+1</button>
