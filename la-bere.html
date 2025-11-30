@@ -603,6 +603,53 @@
             font-weight: bold;
             color: #D2691E;
         }
+
+        .prediction-counter {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: linear-gradient(135deg, #D2691E 0%, #8B4513 100%);
+            color: white;
+            padding: 15px 25px;
+            border-radius: 15px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+            z-index: 1000;
+            font-size: 18px;
+            font-weight: bold;
+            text-align: center;
+            min-width: 120px;
+            border: 3px solid #FFF8DC;
+            display: none;
+        }
+
+        .prediction-counter.active {
+            display: block;
+        }
+
+        .prediction-counter-label {
+            font-size: 14px;
+            opacity: 0.9;
+            margin-bottom: 5px;
+        }
+
+        .prediction-counter-value {
+            font-size: 32px;
+            font-weight: bold;
+        }
+
+        @media (max-width: 600px) {
+            .prediction-counter {
+                top: 10px;
+                right: 10px;
+                padding: 12px 20px;
+                font-size: 16px;
+                min-width: 100px;
+            }
+            
+            .prediction-counter-value {
+                font-size: 28px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -665,6 +712,11 @@
 
         <!-- Round Selection Screen -->
         <div id="roundScreen" class="screen">
+            <div id="predictionCounter" class="prediction-counter">
+                <div class="prediction-counter-label">Total Predictions</div>
+                <div class="prediction-counter-value" id="predictionCounterValue">0</div>
+            </div>
+            <button id="backBtnRound" class="btn btn-secondary" onclick="goBack()" style="display: none; margin-bottom: 15px;">← Back</button>
             <div class="round-header">
                 <div class="round-name" id="roundName">ROUND</div>
                 <div class="starting-player" id="startingPlayer">Starting Player</div>
@@ -675,6 +727,7 @@
 
         <!-- Sum Display Screen -->
         <div id="sumScreen" class="screen">
+            <button id="backBtnSum" class="btn btn-secondary" onclick="goBack()" style="display: none; margin-bottom: 15px;">← Back</button>
             <h2>Round Total</h2>
             <div class="sum-display">
                 <div>Total Cards Predicted:</div>
@@ -686,6 +739,7 @@
 
         <!-- Score Input Screen -->
         <div id="scoreScreen" class="screen">
+            <button id="backBtnScore" class="btn btn-secondary" onclick="goBack()" style="display: none; margin-bottom: 15px;">← Back</button>
             <h2>Did players reach their goal?</h2>
             <div id="scoreInputs"></div>
             <button class="btn btn-primary" onclick="calculateScores()">Calculate Scores</button>
@@ -693,6 +747,7 @@
 
         <!-- Scoreboard Screen -->
         <div id="scoreboardScreen" class="screen">
+            <button id="backBtnScoreboard" class="btn btn-secondary" onclick="goBack()" style="display: none; margin-bottom: 15px;">← Back</button>
             <h1>📊 Scoreboard</h1>
             <button id="editModeBtn" class="btn btn-edit" onclick="toggleEditMode()">✏️ Edit</button>
             <div id="addPlayerForm" style="display: none;"></div>
@@ -738,7 +793,10 @@
             currentScores: {},
             editMode: false,
             roundHistory: [],
-            dealersWhoDealtUno: []
+            dealersWhoDealtUno: [],
+            navigationHistory: [],
+            playerOrder: [], // Custom order for future rounds (array of player indices)
+            editModePlayerOrder: [] // Snapshot of order when entering edit mode
         };
 
         // Initialize
@@ -761,6 +819,10 @@
             const saved = localStorage.getItem('laBereGame');
             if (saved) {
                 gameState = JSON.parse(saved);
+                // Backward compatibility: initialize playerOrder if it doesn't exist
+                if (!gameState.playerOrder || gameState.playerOrder.length !== gameState.players.length) {
+                    gameState.playerOrder = gameState.players.map((_, idx) => idx);
+                }
                 showScreen('scoreboardScreen');
                 updateScoreboard();
             }
@@ -785,7 +847,10 @@
                 currentScores: {},
                 editMode: false,
                 roundHistory: [],
-                dealersWhoDealtUno: []
+                dealersWhoDealtUno: [],
+                navigationHistory: [],
+                playerOrder: [],
+                editModePlayerOrder: []
             };
             showScreen('setupScreen');
         }
@@ -835,6 +900,9 @@
             
             gameState.currentRound = 0;
             
+            // Initialize playerOrder with default order (0, 1, 2, ...)
+            gameState.playerOrder = gameState.players.map((_, idx) => idx);
+            
             // Show dealer selection screen
             showScreen('dealerScreen');
         }
@@ -843,6 +911,7 @@
             const roundIndex = gameState.currentRound % 4;
             gameState.currentRoundType = gameState.roundTypes[roundIndex];
             gameState.currentSelections = Array(gameState.players.length).fill(null);
+            gameState.currentScores = {}; // Clear scores for new round
             
             // Check if this is round Uno and dealer has dealt it before
             if (gameState.currentRoundType === 'Uno' && 
@@ -880,12 +949,25 @@
             const container = document.getElementById('playerSelections');
             container.innerHTML = '';
             
+            // Use playerOrder if available, otherwise use array index order
+            const orderToUse = (gameState.playerOrder && gameState.playerOrder.length === gameState.players.length) 
+                ? gameState.playerOrder 
+                : gameState.players.map((_, idx) => idx);
+            
+            // Find the position of startingPlayerIndex in the order
+            let startingPosition = orderToUse.indexOf(gameState.startingPlayerIndex);
+            if (startingPosition === -1) {
+                // Fallback: if startingPlayerIndex not in order, use first position
+                startingPosition = 0;
+            }
+            
             // Create selections in order starting from starting player
             const activePlayers = [];
-            for (let i = 0; i < gameState.players.length; i++) {
-                const index = (gameState.startingPlayerIndex + i) % gameState.players.length;
-                if (!gameState.players[index].eliminated) {
-                    activePlayers.push({...gameState.players[index], originalIndex: index});
+            for (let i = 0; i < orderToUse.length; i++) {
+                const orderIndex = (startingPosition + i) % orderToUse.length;
+                const playerIndex = orderToUse[orderIndex];
+                if (!gameState.players[playerIndex].eliminated) {
+                    activePlayers.push({...gameState.players[playerIndex], originalIndex: playerIndex});
                 }
             }
             
@@ -901,6 +983,9 @@
                 
                 createChoiceButtons(player.originalIndex, maxValue, orderIndex === activePlayers.length - 1, activePlayers.length);
             });
+            
+            // Update prediction counter
+            updatePredictionCounter();
         }
 
         function createChoiceButtons(playerIndex, maxValue, isLastPlayer, activePlayerCount) {
@@ -935,9 +1020,24 @@
             }
         }
 
+        function updatePredictionCounter() {
+            const counter = document.getElementById('predictionCounter');
+            const counterValue = document.getElementById('predictionCounterValue');
+            
+            if (!counter || !counterValue) return;
+            
+            // Calculate current sum of predictions
+            const sum = gameState.currentSelections.reduce((total, val) => {
+                return total + (val !== null ? val : 0);
+            }, 0);
+            
+            counterValue.textContent = sum;
+        }
+
         function selectChoice(playerIndex, value) {
             gameState.currentSelections[playerIndex] = value;
             updateRoundScreen();
+            updatePredictionCounter();
             
             // Check if all active players have selected
             const allSelected = gameState.players.every((player, idx) => {
@@ -969,17 +1069,34 @@
             showScreen('sumScreen');
         }
 
-        function showScoreInput() {
+        function showScoreInput(shouldNavigate = true) {
             const container = document.getElementById('scoreInputs');
             container.innerHTML = '';
-            gameState.currentScores = {};
+            
+            // Only reset currentScores if it's empty (preserve when going back)
+            if (Object.keys(gameState.currentScores).length === 0) {
+                gameState.currentScores = {};
+            }
+            
+            // Use playerOrder if available, otherwise use array index order
+            const orderToUse = (gameState.playerOrder && gameState.playerOrder.length === gameState.players.length) 
+                ? gameState.playerOrder 
+                : gameState.players.map((_, idx) => idx);
+            
+            // Find the position of startingPlayerIndex in the order
+            let startingPosition = orderToUse.indexOf(gameState.startingPlayerIndex);
+            if (startingPosition === -1) {
+                // Fallback: if startingPlayerIndex not in order, use first position
+                startingPosition = 0;
+            }
             
             // Create inputs in the same order as round selection (starting from starting player)
             const activePlayers = [];
-            for (let i = 0; i < gameState.players.length; i++) {
-                const index = (gameState.startingPlayerIndex + i) % gameState.players.length;
-                if (!gameState.players[index].eliminated) {
-                    activePlayers.push(index);
+            for (let i = 0; i < orderToUse.length; i++) {
+                const orderIndex = (startingPosition + i) % orderToUse.length;
+                const playerIndex = orderToUse[orderIndex];
+                if (!gameState.players[playerIndex].eliminated) {
+                    activePlayers.push(playerIndex);
                 }
             }
             
@@ -995,9 +1112,16 @@
                     </div>
                 `;
                 container.appendChild(div);
+                
+                // Restore previous selection if it exists
+                if (gameState.currentScores[idx] !== undefined) {
+                    setScore(idx, gameState.currentScores[idx]);
+                }
             });
             
-            showScreen('scoreScreen');
+            if (shouldNavigate) {
+                showScreen('scoreScreen');
+            }
         }
 
         function setScore(playerIndex, accomplished) {
@@ -1126,27 +1250,51 @@
             const container = document.getElementById('scoreboard');
             container.innerHTML = '';
             
-            // Sort players by score (lowest first, eliminated last)
-            const sortedPlayers = [...gameState.players].sort((a, b) => {
-                if (a.eliminated && !b.eliminated) return 1;
-                if (!a.eliminated && b.eliminated) return -1;
-                return a.score - b.score;
-            });
+            let playersToDisplay = [];
             
-            sortedPlayers.forEach(player => {
+            if (gameState.editMode) {
+                // In edit mode, use the snapshot order (don't re-sort)
+                if (gameState.editModePlayerOrder.length === 0) {
+                    // Initialize if empty (shouldn't happen, but safety check)
+                    gameState.editModePlayerOrder = gameState.players.map((_, idx) => idx);
+                }
+                playersToDisplay = gameState.editModePlayerOrder.map(idx => ({
+                    ...gameState.players[idx],
+                    originalIndex: idx
+                }));
+            } else {
+                // Not in edit mode: sort by score (lowest first, eliminated last)
+                const sortedPlayers = [...gameState.players].sort((a, b) => {
+                    if (a.eliminated && !b.eliminated) return 1;
+                    if (!a.eliminated && b.eliminated) return -1;
+                    return a.score - b.score;
+                });
+                playersToDisplay = sortedPlayers.map(player => ({
+                    ...player,
+                    originalIndex: gameState.players.findIndex(p => p.name === player.name)
+                }));
+            }
+            
+            playersToDisplay.forEach((player, displayIndex) => {
                 const div = document.createElement('div');
                 div.className = 'score-item' + (player.eliminated ? ' eliminated' : '');
                 
-                // Find the original index of this player
-                const playerIndex = gameState.players.findIndex(p => p.name === player.name);
+                const playerIndex = player.originalIndex;
                 
                 if (gameState.editMode) {
+                    const canMoveUp = displayIndex > 0;
+                    const canMoveDown = displayIndex < playersToDisplay.length - 1;
+                    
                     div.innerHTML = `
                         <span class="player-name-score">
                             ${player.name}
                             ${player.eliminated ? '<span class="eliminated-badge">SE FUE</span>' : ''}
                         </span>
                         <div class="edit-controls">
+                            <div style="display: flex; flex-direction: column; gap: 2px; margin-right: 5px;">
+                                <button class="adjust-btn" onclick="movePlayerUp(${displayIndex})" ${!canMoveUp ? 'disabled style="opacity: 0.3;"' : ''} style="width: 30px; height: 20px; font-size: 12px; padding: 0;">↑</button>
+                                <button class="adjust-btn" onclick="movePlayerDown(${displayIndex})" ${!canMoveDown ? 'disabled style="opacity: 0.3;"' : ''} style="width: 30px; height: 20px; font-size: 12px; padding: 0;">↓</button>
+                            </div>
                             <button class="adjust-btn" onclick="adjustScore(${playerIndex}, -1)">-1</button>
                             <span class="player-score">${player.score}</span>
                             <button class="adjust-btn" onclick="adjustScore(${playerIndex}, 1)">+1</button>
@@ -1194,6 +1342,8 @@
         function nextRound() {
             gameState.editMode = false;
             document.getElementById('addPlayerForm').style.display = 'none';
+            // Clear navigation history when starting a new round
+            gameState.navigationHistory = [];
             startRound();
         }
 
@@ -1204,11 +1354,148 @@
             checkForSavedGame();
         }
 
-        function showScreen(screenId) {
+        function showScreen(screenId, addToHistory = true) {
+            // Get current active screen before switching
+            const currentScreen = document.querySelector('.screen.active');
+            const currentScreenId = currentScreen ? currentScreen.id : null;
+            
+            // Add to navigation history if this is a forward navigation
+            if (addToHistory && currentScreenId && currentScreenId !== screenId) {
+                // Only add gameplay screens to history
+                const gameplayScreens = ['roundScreen', 'sumScreen', 'scoreScreen', 'scoreboardScreen'];
+                if (gameplayScreens.includes(currentScreenId) || gameplayScreens.includes(screenId)) {
+                    if (gameplayScreens.includes(currentScreenId)) {
+                        gameState.navigationHistory.push(currentScreenId);
+                    }
+                }
+            }
+            
             document.querySelectorAll('.screen').forEach(screen => {
                 screen.classList.remove('active');
             });
             document.getElementById(screenId).classList.add('active');
+            
+            // Show/hide prediction counter based on screen
+            const predictionCounter = document.getElementById('predictionCounter');
+            if (predictionCounter) {
+                if (screenId === 'roundScreen') {
+                    predictionCounter.classList.add('active');
+                    updatePredictionCounter();
+                } else {
+                    predictionCounter.classList.remove('active');
+                }
+            }
+            
+            // Update back button visibility
+            updateBackButtonVisibility(screenId);
+        }
+
+        function updateBackButtonVisibility(screenId) {
+            const gameplayScreens = ['roundScreen', 'sumScreen', 'scoreScreen', 'scoreboardScreen'];
+            const backButtons = {
+                'roundScreen': 'backBtnRound',
+                'sumScreen': 'backBtnSum',
+                'scoreScreen': 'backBtnScore',
+                'scoreboardScreen': 'backBtnScoreboard'
+            };
+            
+            // Show/hide back button based on navigation history
+            if (gameplayScreens.includes(screenId) && backButtons[screenId]) {
+                const backBtn = document.getElementById(backButtons[screenId]);
+                if (backBtn) {
+                    // Show back button if there's history or if we're on scoreboard and can go back to score input
+                    if (gameState.navigationHistory.length > 0 || 
+                        (screenId === 'scoreboardScreen' && Object.keys(gameState.currentScores).length > 0)) {
+                        backBtn.style.display = 'block';
+                    } else {
+                        backBtn.style.display = 'none';
+                    }
+                }
+            }
+        }
+
+        function goBack() {
+            const gameplayScreens = ['roundScreen', 'sumScreen', 'scoreScreen', 'scoreboardScreen'];
+            
+            // Determine which screen to go back to
+            let previousScreen = null;
+            
+            if (gameState.navigationHistory.length > 0) {
+                // Pop from history
+                previousScreen = gameState.navigationHistory.pop();
+            } else {
+                // Fallback: determine previous screen based on current screen
+                const currentScreen = document.querySelector('.screen.active');
+                if (currentScreen) {
+                    const currentScreenId = currentScreen.id;
+                    if (currentScreenId === 'sumScreen') {
+                        previousScreen = 'roundScreen';
+                    } else if (currentScreenId === 'scoreScreen') {
+                        previousScreen = 'sumScreen';
+                    } else if (currentScreenId === 'scoreboardScreen') {
+                        // If we have currentScores, go back to scoreScreen
+                        if (Object.keys(gameState.currentScores).length > 0) {
+                            previousScreen = 'scoreScreen';
+                        } else {
+                            // Otherwise go to dealer selection or round screen
+                            previousScreen = gameState.currentRoundType ? 'roundScreen' : 'dealerScreen';
+                        }
+                    } else if (currentScreenId === 'roundScreen') {
+                        previousScreen = 'dealerScreen';
+                    }
+                }
+            }
+            
+            if (previousScreen) {
+                // Navigate without adding to history (since we're going back)
+                showScreen(previousScreen, false);
+                
+                // Restore state based on the screen we're going back to
+                restoreScreenState(previousScreen);
+            }
+        }
+
+        function restoreScreenState(screenId) {
+            switch(screenId) {
+                case 'roundScreen':
+                    // Restore round screen state
+                    updateRoundScreen();
+                    // Re-enable/disable Show Total button based on selections
+                    const allSelected = gameState.players.every((player, idx) => {
+                        return player.eliminated || gameState.currentSelections[idx] !== null;
+                    });
+                    document.getElementById('showSumBtn').disabled = !allSelected;
+                    break;
+                    
+                case 'sumScreen':
+                    // Restore sum screen state
+                    const sum = gameState.currentSelections.reduce((total, val) => {
+                        return total + (val !== null ? val : 0);
+                    }, 0);
+                    const maxValue = gameState.roundMaxValues[gameState.currentRoundType];
+                    
+                    document.getElementById('sumNumber').textContent = sum;
+                    
+                    const messageDiv = document.getElementById('fiummmMessage');
+                    if (sum < maxValue) {
+                        messageDiv.textContent = '🔥 THERE IS A FIUMMM!!';
+                        messageDiv.className = 'fiummm-message fiummm-yes';
+                    } else {
+                        messageDiv.textContent = 'No hay fium señores';
+                        messageDiv.className = 'fiummm-message fiummm-no';
+                    }
+                    break;
+                    
+                case 'scoreScreen':
+                    // Restore score input screen state (don't navigate, we're already there)
+                    showScoreInput(false);
+                    break;
+                    
+                case 'scoreboardScreen':
+                    // Scoreboard state is already in gameState, just update display
+                    updateScoreboard();
+                    break;
+            }
         }
 
         function toggleEditMode() {
@@ -1216,14 +1503,54 @@
             const editBtn = document.getElementById('editModeBtn');
             
             if (gameState.editMode) {
+                // Entering edit mode: snapshot current display order
                 editBtn.textContent = '✓ Done';
                 editBtn.classList.add('active');
+                
+                // Create snapshot of current display order (sorted by score)
+                const sortedPlayers = [...gameState.players].sort((a, b) => {
+                    if (a.eliminated && !b.eliminated) return 1;
+                    if (!a.eliminated && b.eliminated) return -1;
+                    return a.score - b.score;
+                });
+                gameState.editModePlayerOrder = sortedPlayers.map(player => 
+                    gameState.players.findIndex(p => p.name === player.name)
+                );
             } else {
+                // Exiting edit mode: apply custom order to playerOrder for future rounds
                 editBtn.textContent = '✏️ Edit';
                 editBtn.classList.remove('active');
                 // Hide add player form if open
                 document.getElementById('addPlayerForm').style.display = 'none';
+                
+                // Save the edited order to playerOrder for use in future rounds
+                gameState.playerOrder = [...gameState.editModePlayerOrder];
+                gameState.editModePlayerOrder = [];
             }
+            
+            updateScoreboard();
+            saveGame();
+        }
+
+        function movePlayerUp(displayIndex) {
+            if (displayIndex <= 0) return;
+            
+            // Swap with previous player in editModePlayerOrder
+            const temp = gameState.editModePlayerOrder[displayIndex];
+            gameState.editModePlayerOrder[displayIndex] = gameState.editModePlayerOrder[displayIndex - 1];
+            gameState.editModePlayerOrder[displayIndex - 1] = temp;
+            
+            updateScoreboard();
+            saveGame();
+        }
+
+        function movePlayerDown(displayIndex) {
+            if (displayIndex >= gameState.editModePlayerOrder.length - 1) return;
+            
+            // Swap with next player in editModePlayerOrder
+            const temp = gameState.editModePlayerOrder[displayIndex];
+            gameState.editModePlayerOrder[displayIndex] = gameState.editModePlayerOrder[displayIndex + 1];
+            gameState.editModePlayerOrder[displayIndex + 1] = temp;
             
             updateScoreboard();
             saveGame();
@@ -1280,11 +1607,24 @@
             }
             
             // Add the new player
+            const newPlayerIndex = gameState.players.length;
             gameState.players.push({
                 name: name,
                 score: score,
                 eliminated: score >= 50
             });
+            
+            // Add to playerOrder (at the end)
+            if (!gameState.playerOrder || gameState.playerOrder.length === 0) {
+                gameState.playerOrder = gameState.players.map((_, idx) => idx);
+            } else {
+                gameState.playerOrder.push(newPlayerIndex);
+            }
+            
+            // If in edit mode, also add to editModePlayerOrder
+            if (gameState.editMode && gameState.editModePlayerOrder.length > 0) {
+                gameState.editModePlayerOrder.push(newPlayerIndex);
+            }
             
             // Hide form and update
             cancelAddPlayer();
