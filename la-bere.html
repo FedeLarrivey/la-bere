@@ -796,7 +796,8 @@
             dealersWhoDealtUno: [],
             navigationHistory: [],
             playerOrder: [], // Custom order for future rounds (array of player indices)
-            editModePlayerOrder: [] // Snapshot of order when entering edit mode
+            editModePlayerOrder: [], // Snapshot of order when entering edit mode
+            isRecalculatingRound: false // Flag to track if we're recalculating a round (set when going back to scoreScreen)
         };
 
         // Initialize
@@ -850,7 +851,8 @@
                 dealersWhoDealtUno: [],
                 navigationHistory: [],
                 playerOrder: [],
-                editModePlayerOrder: []
+                editModePlayerOrder: [],
+                isRecalculatingRound: false
             };
             showScreen('setupScreen');
         }
@@ -1174,55 +1176,53 @@
                 return;
             }
             
-            // Check if we're recalculating this round (going back and changing scores)
-            // If currentRound was already incremented, the last round in history should match currentRound
-            // Otherwise, it should match currentRound + 1
-            const lastRoundInHistory = gameState.roundHistory.length > 0 ? gameState.roundHistory[gameState.roundHistory.length - 1] : null;
-            const isRecalculating = lastRoundInHistory !== null && 
-                                   lastRoundInHistory.type === gameState.currentRoundType &&
-                                   (lastRoundInHistory.round === gameState.currentRound || 
-                                    lastRoundInHistory.round === gameState.currentRound + 1);
+            // Check if we're recalculating this round (only true if user explicitly went back to scoreScreen)
+            const isRecalculating = gameState.isRecalculatingRound && gameState.roundHistory.length > 0;
             
-            // If recalculating, reverse the previous scores and restore round state
+            // Expected round number for this calculation
+            const expectedRoundNumber = gameState.currentRound + 1;
+            let roundNumberToUse = expectedRoundNumber;
+            
+            // If recalculating, reverse the previous scores
             if (isRecalculating) {
                 const lastRound = gameState.roundHistory[gameState.roundHistory.length - 1];
                 
-                // Reverse the scores that were added in the previous calculation
-                lastRound.results.forEach(result => {
-                    const playerIndex = gameState.players.findIndex(p => p.name === result.player);
-                    if (playerIndex !== -1) {
-                        // Subtract the points that were previously added
-                        if (result.achieved) {
-                            gameState.players[playerIndex].score -= result.points;
-                            
-                            // Re-check elimination status (player might no longer be eliminated)
-                            if (gameState.players[playerIndex].score < 50) {
-                                gameState.players[playerIndex].eliminated = false;
+                // Verify this is actually the same round we're recalculating
+                // Check if the last round matches the current round type (user is editing the last calculated round)
+                if (lastRound.type === gameState.currentRoundType) {
+                    // Reverse the scores that were added in the previous calculation
+                    lastRound.results.forEach(result => {
+                        const playerIndex = gameState.players.findIndex(p => p.name === result.player);
+                        if (playerIndex !== -1) {
+                            // Subtract the points that were previously added
+                            if (result.achieved) {
+                                gameState.players[playerIndex].score -= result.points;
+                                
+                                // Re-check elimination status (player might no longer be eliminated)
+                                if (gameState.players[playerIndex].score < 50) {
+                                    gameState.players[playerIndex].eliminated = false;
+                                }
                             }
                         }
-                    }
-                });
-                
-                // Restore dealer and starting player indices if stored in history
-                if (lastRound.dealerIndex !== undefined) {
-                    gameState.dealerIndex = lastRound.dealerIndex;
+                    });
+                    
+                    // Use the same round number from the last round
+                    roundNumberToUse = lastRound.round;
+                    
+                    // Remove the last round from history
+                    gameState.roundHistory.pop();
+                } else {
+                    // Not the same round type - shouldn't happen, but reset flag to be safe
+                    gameState.isRecalculatingRound = false;
                 }
-                if (lastRound.startingPlayerIndex !== undefined) {
-                    gameState.startingPlayerIndex = lastRound.startingPlayerIndex;
-                }
-                
-                // Restore currentRound to what it was before the first calculation
-                if (lastRound.currentRoundAtTime !== undefined) {
-                    gameState.currentRound = lastRound.currentRoundAtTime;
-                }
-                
-                // Remove the last round from history
-                gameState.roundHistory.pop();
             }
             
+            // Always clear the flag after checking (whether we recalculated or not)
+            // This ensures normal progression works even if flag was accidentally set
+            gameState.isRecalculatingRound = false;
+            
             // Save round history
-            // If recalculating, use the same round number; otherwise use currentRound + 1
-            const roundNumber = isRecalculating ? lastRoundInHistory.round : gameState.currentRound + 1;
+            const roundNumber = roundNumberToUse;
             const roundData = {
                 round: roundNumber,
                 type: gameState.currentRoundType,
@@ -1281,6 +1281,7 @@
                 
                 gameState.currentRound++;
             }
+            // If recalculating, currentRound stays the same (already incremented from first calculation)
             
             saveGame();
             showScoreboard();
@@ -1542,6 +1543,11 @@
                     
                 case 'scoreScreen':
                     // Restore score input screen state (don't navigate, we're already there)
+                    // Set recalculation flag if we're going back from scoreboard
+                    const currentScreen = document.querySelector('.screen.active');
+                    if (currentScreen && currentScreen.id === 'scoreboardScreen') {
+                        gameState.isRecalculatingRound = true;
+                    }
                     showScoreInput(false);
                     break;
                     
